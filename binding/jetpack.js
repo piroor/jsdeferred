@@ -16,32 +16,13 @@ const Deferred = D();
 const {Cc,Ci,components} = require("chrome");
 
 function setTimeout (f, i) {
-	if (i) {
-		let timer = Cc["@mozilla.org/timer;1"].createInstance(Ci.nsITimer);
-		timer.initWithCallback(f, i, timer.TYPE_ONE_SHOT);
-		return timer;
-	}
-	else {
-		let request = Cc['@mozilla.org/xmlextras/xmlhttprequest;1']
-					.createInstance(Ci.nsIXMLHttpRequest)
-					.QueryInterface(Ci.nsIDOMEventTarget);
-		let handler = function() {
-				if (request.readyState < 2) return;
-				request.removeEventListener("readystatechange", handler, false);
-				f();
-			};
-		request.open("GET", "data:,", true);
-		request.addEventListener("readystatechange", handler, false);
-		request.send(null);
-		return request;
-	}
+	let timer = Cc["@mozilla.org/timer;1"].createInstance(Ci.nsITimer);
+	timer.initWithCallback(f, i, timer.TYPE_ONE_SHOT);
+	return timer;
 }
 
 function clearTimeout (timer) {
-	if (timer instanceof Ci.nsITimer)
-		timer.cancel();
-	else
-		timer.abort();
+	timer.cancel();
 }
 
 Deferred.postie = function (constructor, opts) {
