@@ -1,7 +1,7 @@
 /**
  * @fileOverview JSDeferred
  * @author       cho45@lowreal.net
- * @version      0.3.4
+ * @version      0.4.0
  * @license
  * JSDeferred Copyright (c) 2007 cho45 ( www.lowreal.net )
  *
@@ -76,8 +76,16 @@ Deferred.ok = function (x) { return x };
 Deferred.ng = function (x) { throw  x };
 Deferred.prototype = {
 	/**
+	 * This is class magic-number of Deferred for determining identity of two instances
+	 * that are from different origins (eg. Mozilla Add-on) instead of using "instanceof".
+	 *
+	 * @const
+	 */
+	_id : 0xe38286e381ae,
+
+	/**
 	 * @private
-	 * @return Deferred this
+	 * @return {Deferred} this
 	 */
 	init : function () {
 		this._next    = null;
@@ -199,13 +207,23 @@ Deferred.prototype = {
 			value = e;
 			if (Deferred.onerror) Deferred.onerror(e);
 		}
-		if (value instanceof Deferred) {
+		if (Deferred.isDeferred(value)) {
 			value._next = this._next;
 		} else {
 			if (this._next) this._next._fire(next, value);
 		}
 		return this;
 	}
+};
+/**
+ * Returns true if an argument is Deferred.
+ *
+ * @function
+ * @param {*} obj object to determine.
+ * @return {boolean}
+ */
+Deferred.isDeferred = function (obj) {
+	return !!(obj && obj._id == Deferred.prototype._id);
 };
 
 /**
@@ -538,7 +556,7 @@ Deferred.loop = function (n, fun) {
 				}
 				o.prev = ret;
 				ret = fun.call(this, i, o);
-				if (ret instanceof Deferred) {
+				if (Deferred.isDeferred(ret)) {
 					return ret.next(function (r) {
 						ret = r;
 						return Deferred.call(_loop, i + step);
