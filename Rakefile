@@ -180,14 +180,14 @@ file "jsdeferred.jscodemodule.js" => ["jsdeferred.js", "binding/jscodemodule.js"
 	File.open(t.name, "w") {|f|
 		f.puts "// Usage:: Components.utils.import('..../jsdeferred.jscodemodule.js');"
 		f << mini(File.read("binding/jscodemodule.js").sub("/*include JSDeferred*/", File.read("jsdeferred.js")))
+		f.puts "// End of JSDeferred"
 	}
 end
 
-file "jsdeferred.bootstrap.js" => ["jsdeferred.js", "binding/bootstrap.js"] do |t|
+file "jsdeferred.bootstrap.js" => ["jsdeferred.jscodemodule.js", "binding/bootstrap.js"] do |t|
 	File.open(t.name, "w") {|f|
 		f.puts "// Usage:: var Deferred = require('..../jsdeferred.bootstrap.js');"
-		f << mini(File.read("binding/bootstrap.js").sub("/*include JSDeferred*/", File.read("jsdeferred.js")))
-		f.puts "// End of JSDeferred"
+		f << mini(File.read("binding/bootstrap.js").sub("/*include JSDeferred*/", File.read("jsdeferred.jscodemodule.js")))
 	}
 end
 

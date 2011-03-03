@@ -2,24 +2,22 @@ var EXPORTED_SYMBOLS = ["Deferred"];
 
 function D () {
 
+var timers = [];
+
 function setTimeout (f, i) {
 	let timer = Components.classes["@mozilla.org/timer;1"]
 					.createInstance(Components.interfaces.nsITimer);
 	timer.initWithCallback(f, i, timer.TYPE_ONE_SHOT);
+	timers.push(timer);
 	return timer;
 }
 
 function clearTimeout (timer) {
+	timers.splice(timers.indexOf(timer), 1);
 	timer.cancel();
 }
 
 /*include JSDeferred*/
-
-Deferred.Deferred = Deferred;
-return Deferred;
-}
-
-const Deferred = D();
 
 Deferred.postie_for_message_manager = function (manager) {
 	var ret = {
@@ -50,7 +48,7 @@ Deferred.postie_for_message_manager = function (manager) {
 
 	manager.loadFrameScript('data:application/javascript,'+encodeURIComponent(<![CDATA[
 		(function(_global) {
-			var Deferred = %JSDEFERRED%();
+			var [Deferred, timers] = %JSDEFERRED%();
 			var _onMessage = function (message) {
 					switch (message.name) {
 						case '%ID%:request':
@@ -72,6 +70,10 @@ Deferred.postie_for_message_manager = function (manager) {
 						case '%ID%:destroy':
 							removeMessageListener('%ID%:request', onMessage);
 							removeMessageListener('%ID%:destroy', onMessage);
+							timers.forEach(function(aTimer) {
+								aTimer.cancel();
+							});
+							timers = undefined;
 							_onMessage = undefined;
 							_global = undefined;
 							Deferred = undefined;
@@ -122,5 +124,11 @@ Deferred.postie = function (target) {
 	if (target instanceof Components.interfaces.nsIFrameMessageManager)
 		return Deferred.postie_for_message_manager(target);
 	else
-		throw new Error('unknown type object was given to postie().\n'+target);
+		throw new Error('unknown type object was given to Deferred.postie().\n'+target);
 };
+
+Deferred.Deferred = Deferred;
+return [Deferred, timers];
+}
+
+var [Deferred, timers] = D();
