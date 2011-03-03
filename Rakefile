@@ -180,7 +180,6 @@ file "jsdeferred.jscodemodule.js" => ["jsdeferred.js", "binding/jscodemodule.js"
 	File.open(t.name, "w") {|f|
 		f.puts "// Usage:: Components.utils.import('..../jsdeferred.jscodemodule.js');"
 		f << mini(File.read("binding/jscodemodule.js").sub("/*include JSDeferred*/", File.read("jsdeferred.js")))
-		f.puts "// End of JSDeferred"
 	}
 end
 
