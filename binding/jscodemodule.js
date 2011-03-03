@@ -21,10 +21,7 @@ return Deferred;
 
 const Deferred = D();
 
-Deferred.postie = function (manager) {
-	if (!(manager instanceof Components.interfaces.nsIFrameMessageManager))
-		throw new Error('Not a message manager was given to postie().\n'+manager);
-
+Deferred.postie_for_message_manager = function (manager) {
 	var ret = {
 			__proto__ : manager,
 			__noSuchMethod__ : function (name, args) {
@@ -119,4 +116,11 @@ Deferred.postie = function (manager) {
 	};
 
 	return ret;
+};
+
+Deferred.postie = function (target) {
+	if (target instanceof Components.interfaces.nsIFrameMessageManager)
+		return Deferred.postie_for_message_manager(target);
+	else
+		throw new Error('unknown type object was given to postie().\n'+target);
 };
