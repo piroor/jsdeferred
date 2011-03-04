@@ -3,7 +3,6 @@
 function shutdown()
 {
 	destroy();
-	Deferred = undefined;
 }
 
 exports = {};

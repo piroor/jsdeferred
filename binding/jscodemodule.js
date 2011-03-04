@@ -74,7 +74,6 @@ Deferred.postie_for_message_manager = function (manager) {
 							_destroy();
 							_onMessage = undefined;
 							_global = undefined;
-							Deferred = undefined;
 							break;
 					}
 				};
@@ -139,6 +138,9 @@ function destroy() {
 		messageManagers[i].sendAsyncMessage(i+':destroy');
 	}
 	messageManagers = undefined;
+
+	delete Deferred.Deferred;
+	Deferred = undefined;
 }
 
 Deferred.Deferred = Deferred;
