@@ -127,6 +127,8 @@ Deferred.postie = function (target) {
 		throw new Error('unknown type object was given to Deferred.postie().\n'+target);
 };
 
+Deferred.methods.push('postie');
+
 Deferred.Deferred = Deferred;
 return [Deferred, timers];
 }
