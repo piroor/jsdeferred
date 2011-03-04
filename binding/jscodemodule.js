@@ -19,6 +19,7 @@ function clearTimeout (timer) {
 
 /*include JSDeferred*/
 
+var messageManagers = {};
 Deferred.postie_for_message_manager = function (manager) {
 	var ret = {
 			__proto__ : manager,
@@ -48,7 +49,7 @@ Deferred.postie_for_message_manager = function (manager) {
 
 	manager.loadFrameScript('data:application/javascript,'+encodeURIComponent(<![CDATA[
 		(function(_global) {
-			var [Deferred, timers] = %JSDEFERRED%();
+			var [Deferred, _destroy] = %JSDEFERRED%();
 			var _onMessage = function (message) {
 					switch (message.name) {
 						case '%ID%:request':
@@ -70,10 +71,7 @@ Deferred.postie_for_message_manager = function (manager) {
 						case '%ID%:destroy':
 							removeMessageListener('%ID%:request', onMessage);
 							removeMessageListener('%ID%:destroy', onMessage);
-							timers.forEach(function(aTimer) {
-								aTimer.cancel();
-							});
-							timers = undefined;
+							_destroy();
 							_onMessage = undefined;
 							_global = undefined;
 							Deferred = undefined;
@@ -117,6 +115,8 @@ Deferred.postie_for_message_manager = function (manager) {
 		manager.removeMessageListener(postieId+':response', messageListener);
 	};
 
+	messageManagers[postieId] = ret;
+
 	return ret;
 };
 
@@ -129,8 +129,20 @@ Deferred.postie = function (target) {
 
 Deferred.methods.push('postie');
 
-Deferred.Deferred = Deferred;
-return [Deferred, timers];
+function destroy() {
+	timers.forEach(function(aTimer) {
+		aTimer.cancel();
+	});
+	timers = undefined;
+
+	for (let i in messageManagers) {
+		messageManagers[i].sendAsyncMessage(i+':destroy');
+	}
+	messageManagers = undefined;
 }
 
-var [Deferred, timers] = D();
+Deferred.Deferred = Deferred;
+return [Deferred, destroy];
+}
+
+var [Deferred, destroy] = D();

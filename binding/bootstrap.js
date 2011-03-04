@@ -2,10 +2,7 @@
 
 function shutdown()
 {
-	timers.forEach(function(aTimer) {
-		aTimer.cancel();
-	});
-	timers = undefined;
+	destroy();
 	Deferred = undefined;
 }
 
