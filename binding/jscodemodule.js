@@ -42,7 +42,12 @@ Deferred.postie_for_message_manager = function (manager) {
 				queuedMessages = null;
 			} else  {
 				let callback = callbacks[message.id];
-				if (callback) callback(message.value, message.error);
+				if (callback) {
+					callback(message.value, message.error);
+					// We must free the memory. Deferred.next() doesn't expect
+					// that the callback function is called multiply.
+					delete callbacks[message.id];
+				}
 			}
 		};
 	manager.addMessageListener(postieId+':response', messageListener);
