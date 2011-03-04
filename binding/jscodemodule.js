@@ -28,21 +28,21 @@ Deferred.postie_for_message_manager = function (manager) {
 			}
 		};
 	var id  = 0;
-	var cb  = {};
-	var mm  = [];
+	var callbacks = {};
+	var queuedMessages = [];
 
 	var postieId = Date.now() + ':' + parseInt(Math.random() * 65000);
 
 	var messageListener = function (message) {
 			message = message.json;
 			if (message.init) {
-				for (let i = 0, it; it = mm[i]; i++) {
-					manager.sendAsyncMessage(postieId+':request', it);
+				for each (let queued in queuedMessage) {
+					manager.sendAsyncMessage(postieId+':request', queued);
 				}
-				mm = null;
+				queuedMessages = null;
 			} else  {
-				let c = cb[message.id];
-				if (c) c(message.value, message.error);
+				let callback = callbacks[message.id];
+				if (callback) callback(message.value, message.error);
 			}
 		};
 	manager.addMessageListener(postieId+':response', messageListener);
@@ -93,17 +93,17 @@ Deferred.postie_for_message_manager = function (manager) {
 
 		code = (typeof code == 'function') ? code.toSource() : 'function () {' + code + '}';
 
-		var mes = {
+		var message = {
 			id : id++,
 			code : '(' + code + ').apply(_global, ' + JSON.stringify(args) + ')'
 		};
 
-		cb[mes.id] = function (v, e) { e ? deferred.fail(e) : deferred.call(v) };
+		callback[message.id] = function (value, error) { error ? deferred.fail(error) : deferred.call(value) };
 
-		if (mm) {
-			mm.push(mes);
+		if (queuedMessages) {
+			queuedMessages.push(message);
 		} else {
-			manager.sendAsyncMessage(postieId+':request', mes);
+			manager.sendAsyncMessage(postieId+':request', message);
 		}
 
 		return deferred;
