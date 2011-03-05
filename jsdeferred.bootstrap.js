@@ -396,43 +396,9 @@ Deferred.newChromeWorker = function (script) {
 
 	var workerId = Date.now() + ':' + parseInt(Math.random() * 65000);
 
-	var code = <![CDATA[
-			(function(_global) {
-				var [Deferred, _destroy] = %JSDEFERRED%();
-				_global.onmessage = function (event) {
-					var message = event.data;
-					switch (message.type) {
-						case 'request':
-							var data = { id : message.json.id }
-							Deferred
-								.next(function () {
-									return eval(message.json.code);
-								})
-								.next(function (value) {
-									data.value = value;
-									postMessage(data);
-								})
-								.error(function (error) {
-									data.error = error;
-									postMessage(data);
-								});
-							break;
-
-						case 'destroy':
-							_destroy();
-							_global.onmessage = undefined;
-							_global = undefined;
-							break;
-					}
-				};
-				postMessage({ id : -1, init : true });
-			})(this);
-		]]>.toString()
-			.replace(/%JSDEFERRED%/, D.toSource());
-
 	var worker = Components.classes['@mozilla.org/threads/workerfactory;1']
 					.createInstance(Ci.nsIWorkerFactory)
-					.newChromeWorker('data:application/javascript,'+encodeURIComponent(code));
+					.newChromeWorker('jsdeferred-worker.js');
 	worker.onmessage = function (event) {
 		var message = event.data;
 		if (message.init) {
