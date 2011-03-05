@@ -4,20 +4,132 @@ function D () {
 
 var timers = [];
 
-function setTimeout (f, i) {
-	let timer = Components.classes["@mozilla.org/timer;1"]
-					.createInstance(Components.interfaces.nsITimer);
-	timer.initWithCallback(f, i, timer.TYPE_ONE_SHOT);
-	timers.push(timer);
-	return timer;
-}
+if (typeof setTimeout == 'undefined') {
+	function setTimeout (f, i) {
+		let timer = Components.classes["@mozilla.org/timer;1"]
+						.createInstance(Components.interfaces.nsITimer);
+		timer.initWithCallback(f, i, timer.TYPE_ONE_SHOT);
+		timers.push(timer);
+		return timer;
+	}
 
-function clearTimeout (timer) {
-	timers.splice(timers.indexOf(timer), 1);
-	timer.cancel();
+	function clearTimeout (timer) {
+		timers.splice(timers.indexOf(timer), 1);
+		timer.cancel();
+	}
 }
 
 /*include JSDeferred*/
+
+var workers = {};
+Deferred.newChromeWorker = function (script) {
+	var id  = 0;
+	var callbacks = {};
+	var queuedMessages = [];
+
+	var workerId = Date.now() + ':' + parseInt(Math.random() * 65000);
+
+	var code = <![CDATA[
+			(function(_global) {
+				var [Deferred, _destroy] = %JSDEFERRED%();
+				_global.onmessage = function (event) {
+					var message = event.data;
+					switch (message.type) {
+						case 'request':
+							var data = { id : message.json.id }
+							Deferred
+								.next(function () {
+									return eval(message.json.code);
+								})
+								.next(function (value) {
+									data.value = value;
+									postMessage(data);
+								})
+								.error(function (error) {
+									data.error = error;
+									postMessage(data);
+								});
+							break;
+
+						case 'destroy':
+							_destroy();
+							_global.onmessage = undefined;
+							_global = undefined;
+							break;
+					}
+				};
+				postMessage({ id : -1, init : true });
+			})(this);
+		]]>.toString()
+			.replace(/%JSDEFERRED%/, D.toSource());
+
+	var worker = Components.classes['@mozilla.org/threads/workerfactory;1']
+					.createInstance(Ci.nsIWorkerFactory)
+					.newChromeWorker('data:application/javascript,'+encodeURIComponent(code));
+	worker.onmessage = function (event) {
+		var message = event.data;
+		if (message.init) {
+			for each (let queued in queuedMessage) {
+				manager.postMessage(queued);
+			}
+			queuedMessages = null;
+		} else  {
+			let callback = callbacks[message.id];
+			if (callback) {
+				callback(message.value, message.error);
+				// We must free the memory. Deferred.next() doesn't expect
+				// that the callback function is called multiply.
+				delete callbacks[message.id];
+			}
+		}
+	};
+
+	var ret = {
+			__proto__ : worker,
+			__noSuchMethod__ : function (name, args) {
+				return worker[name].apply(worker, args);
+			}
+		};
+
+	ret.post = function (args, code) {
+		var deferred = new Deferred();
+		args = Array.prototype.slice.call(arguments, 0);
+		code = args.pop();
+
+		code = (typeof code == 'function') ? code.toSource() : 'function () {' + code + '}';
+
+		var message = {
+			type : 'request',
+			id   : id++,
+			code : '(' + code + ').apply(_global, ' + JSON.stringify(args) + ')'
+		};
+
+		callbacks[message.id] = function (value, error) { error ? deferred.fail(error) : deferred.call(value) };
+
+		if (queuedMessages) {
+			queuedMessages.push(message);
+		} else {
+			worker.postMessage(message);
+		}
+
+		return deferred;
+	};
+
+	ret.destroy = function () {
+		worker.postMessage({ type : 'destroy' });
+		worker.onmessage = undefined;
+		worker.terminate();
+		delete workers[workerId];
+	};
+
+	workers[workerId] = ret;
+
+	ret.post(function() { Deferred.define(this); });
+
+	if (script) ret.post(script, function(script) { importScripts(script); });
+
+	return ret;
+};
 
 var messageManagers = {};
 Deferred.postie_for_message_manager = function (manager) {
@@ -103,7 +215,7 @@ Deferred.postie_for_message_manager = function (manager) {
 			code : '(' + code + ').apply(_global, ' + JSON.stringify(args) + ')'
 		};
 
-		callback[message.id] = function (value, error) { error ? deferred.fail(error) : deferred.call(value) };
+		callbacks[message.id] = function (value, error) { error ? deferred.fail(error) : deferred.call(value) };
 
 		if (queuedMessages) {
 			queuedMessages.push(message);
@@ -117,6 +229,7 @@ Deferred.postie_for_message_manager = function (manager) {
 	ret.destroy = function () {
 		manager.sendAsyncMessage(postieId+':destroy');
 		manager.removeMessageListener(postieId+':response', messageListener);
+		delete messageManagers[postieId];
 	};
 
 	messageManagers[postieId] = ret;
@@ -138,6 +251,11 @@ function destroy() {
 		aTimer.cancel();
 	});
 	timers = undefined;
+
+	for (let i in workers) {
+		workers[i].terminage();
+	}
+	workers = undefined;
 
 	for (let i in messageManagers) {
 		messageManagers[i].sendAsyncMessage(i+':destroy');
