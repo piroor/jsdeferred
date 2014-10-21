@@ -5,12 +5,14 @@ var EXPORTED_SYMBOLS = ["Deferred"];
 
 function D () {
 
+const Cc = Components.classes;
+const Ci = Components.interfaces;
+
 var timers = [];
 
 if (typeof setTimeout == 'undefined') {
 	function setTimeout (f, i) {
-		let timer = Components.classes["@mozilla.org/timer;1"]
-						.createInstance(Components.interfaces.nsITimer);
+		let timer = Cc["@mozilla.org/timer;1"].createInstance(Ci.nsITimer);
 		timer.initWithCallback(f, i, timer.TYPE_ONE_SHOT);
 		timers.push(timer);
 		return timer;
@@ -192,14 +194,20 @@ Deferred.call = function (fun) {
 };
 
 Deferred.parallel = function (dl) {
-	if (arguments.length > 1) dl = Array.prototype.slice.call(arguments);
+	var isArray = false;
+	if (arguments.length > 1) {
+		dl = Array.prototype.slice.call(arguments);
+		isArray = true;
+	} else if (Array.isArray && Array.isArray(dl) || typeof dl.length == "number") {
+		isArray = true;
+	}
 	var ret = new Deferred(), values = {}, num = 0;
 	for (var i in dl) if (dl.hasOwnProperty(i)) (function (d, i) {
 		if (typeof d == "function") d = Deferred.next(d);
 		d.next(function (v) {
 			values[i] = v;
 			if (--num <= 0) {
-				if (dl instanceof Array) {
+				if (isArray) {
 					values.length = dl.length;
 					values = Array.prototype.slice.call(values, 0);
 				}
@@ -221,12 +229,18 @@ Deferred.parallel = function (dl) {
 };
 
 Deferred.earlier = function (dl) {
-	if (arguments.length > 1) dl = Array.prototype.slice.call(arguments);
+	var isArray = false;
+	if (arguments.length > 1) {
+		dl = Array.prototype.slice.call(arguments);
+		isArray = true;
+	} else if (Array.isArray && Array.isArray(dl) || typeof dl.length == "number") {
+		isArray = true;
+	}
 	var ret = new Deferred(), values = {}, num = 0;
 	for (var i in dl) if (dl.hasOwnProperty(i)) (function (d, i) {
 		d.next(function (v) {
 			values[i] = v;
-			if (dl instanceof Array) {
+			if (isArray) {
 				values.length = dl.length;
 				values = Array.prototype.slice.call(values, 0);
 			}
@@ -287,14 +301,11 @@ Deferred.repeat = function (n, fun) {
 	var i = 0, end = {}, ret = null;
 	return Deferred.next(function () {
 		var t = (new Date()).getTime();
-		divide: {
-			do {
-				if (i >= n) break divide;
-				ret = fun(i++);
-			} while ((new Date()).getTime() - t < 20);
-			return Deferred.call(arguments.callee);
-		}
-		return null;
+		do {
+			if (i >= n) return null;
+			ret = fun(i++);
+		} while ((new Date()).getTime() - t < 20);
+		return Deferred.call(arguments.callee);
 	});
 };
 
@@ -388,6 +399,51 @@ this.Deferred = Deferred;
 
 
 
+function createWorkerFile() {
+	var workerScript = Cc['@mozilla.org/file/directory_service;1']
+						.getService(Ci.nsIProperties)
+						.get('TmpD', Ci.nsILocalFile);
+	workerScript.append('worker.js');
+	workerScript.createUnique(workerScript.NORMAL_FILE_TYPE, 0666);
+
+	var script = D.toSource()+'();'+<![CDATA[
+			onmessage = function (event) {
+				var message = event.data;
+				var _global = this;
+				switch (message.type) {
+					case 'request':
+						var data = { id : message.json.id }
+						Deferred
+							.next(function () {
+								return eval(message.json.code);
+							})
+							.next(function (value) {
+								data.value = value;
+								postMessage(data);
+							})
+							.error(function (error) {
+								data.error = error;
+								postMessage(data);
+							});
+						break;
+
+					case 'destroy':
+						_global.onmessage = undefined;
+						break;
+				}
+			};
+			postMessage({ id : -1, init : true });
+		]]>.toStirng();
+
+	var stream = Cc['@mozilla.org/network/file-output-stream;1']
+					.createInstance(Ci.nsIFileOutputStream);
+	stream.init(workerScript, 2, 0x200, false);
+	stream.write(script, script.length);
+	stream.close();
+
+	return workerScript;
+}
+
 var workers = {};
 Deferred.newChromeWorker = function (script) {
 	var id  = 0;
@@ -396,9 +452,9 @@ Deferred.newChromeWorker = function (script) {
 
 	var workerId = Date.now() + ':' + parseInt(Math.random() * 65000);
 
-	var worker = Components.classes['@mozilla.org/threads/workerfactory;1']
+	var worker = Cc['@mozilla.org/threads/workerfactory;1']
 					.createInstance(Ci.nsIWorkerFactory)
-					.newChromeWorker('jsdeferred-worker.js');
+					.newChromeWorker(workerScriptURL);
 	worker.onmessage = function (event) {
 		var message = event.data;
 		if (message.init) {
@@ -567,7 +623,7 @@ Deferred.postie_for_message_manager = function (manager) {
 };
 
 Deferred.postie = function (target) {
-	if (target instanceof Components.interfaces.nsIFrameMessageManager)
+	if (target instanceof Ci.nsIFrameMessageManager)
 		return Deferred.postie_for_message_manager(target);
 	else
 		throw new Error('unknown type object was given to Deferred.postie().\n'+target);
